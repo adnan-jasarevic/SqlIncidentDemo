@@ -8,7 +8,7 @@ Kao prva linija odbrane, implementiran je `SqlInjectionDetectionMiddleware`. Ova
 - **Izolacija (Faza 3):** Middleware trenutno prekida izvršavanje zahtjeva, odbacuje ga sa status kodom `403 Forbidden` i sprječava da maliciozni kod uopšte dođe do ranjivih dijelova aplikacije ili baze podataka.
 
 ## Uputstvo za pokretanje i testiranje
-Projekat koristi SQLite *In-Memory* bazu, te nisu potrebne nikakve dodatne instalacije baze podataka.
+Projekat koristi SQLite In-Memory bazu.
 
 1. Otvorite folder u terminalu i pokrenite projekat komandom:
    ```bash
