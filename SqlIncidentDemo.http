@@ -1,0 +1,6 @@
+@SqlIncidentDemo_HostAddress = http://localhost:5294
+
+GET {{SqlIncidentDemo_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
