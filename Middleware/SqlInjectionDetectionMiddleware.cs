@@ -2,14 +2,11 @@ using System.Text.RegularExpressions;
 
 namespace SqlIncidentDemo.Middleware;
 
-/// <summary>
 /// Marks an endpoint that is safe by design and does not need signature-based
 /// SQL injection detection.
-/// </summary>
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Method)]
 public sealed class SkipSqlInjectionDetectionAttribute : Attribute;
 
-/// <summary>
 /// A minimal signature-based filter (a "mini WAF"). It inspects query string
 /// values, logs a critical incident when an attack signature matches, and blocks
 /// the request before it reaches vulnerable code.
@@ -17,7 +14,6 @@ public sealed class SkipSqlInjectionDetectionAttribute : Attribute;
 /// A blocklist like this is a detection and containment layer, not a fix:
 /// it can be bypassed (see README, "Known limitations"). The real fix is the
 /// parameterized query in UsersController.SearchSecure.
-/// </summary>
 public partial class SqlInjectionDetectionMiddleware
 {
     private static readonly string[] Signatures =
