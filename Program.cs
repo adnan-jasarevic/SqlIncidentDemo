@@ -1,45 +1,51 @@
-using SqlIncidentDemo.Middleware;
 using Microsoft.Data.Sqlite;
 using Serilog;
+using SqlIncidentDemo.Middleware;
 
-var builder = WebApplication.CreateBuilder(args);
-
-// Podešavanje Serilog-a za strukturirano logiranje
+// Structured security logging to the console and a daily rolling file.
 Log.Logger = new LoggerConfiguration()
     .WriteTo.Console()
     .WriteTo.File("security_incidents.log", rollingInterval: RollingInterval.Day)
     .CreateLogger();
-builder.Host.UseSerilog();
 
+var builder = WebApplication.CreateBuilder(args);
+builder.Host.UseSerilog();
 builder.Services.AddControllers();
+
+// A shared in-memory SQLite database is deleted as soon as its last connection
+// closes. This connection stays open for the app's lifetime to keep the
+// database alive; the DI container disposes it on shutdown.
+var connectionString = builder.Configuration.GetConnectionString("Users")
+    ?? throw new InvalidOperationException("Connection string 'Users' is missing.");
+var keepAliveConnection = new SqliteConnection(connectionString);
+keepAliveConnection.Open();
+SeedDatabase(keepAliveConnection);
+builder.Services.AddSingleton(keepAliveConnection);
 
 var app = builder.Build();
 
-// 1. Inicijalizacija SQLite baze u memoriji
-InitializeDatabase();
+app.UseRouting();
 
-// 2. Dodavanje incident response Middleware (Faza detekcije i izolacije)
+// Incident response: detection (phase 2) and containment (phase 3).
+// It runs after routing so it can see which endpoint a request targets.
 app.UseMiddleware<SqlInjectionDetectionMiddleware>();
 
 app.MapControllers();
 app.Run();
 
-void InitializeDatabase()
+static void SeedDatabase(SqliteConnection connection)
 {
-    // Mode=Memory;Cache=Shared osigurava da baza traje dok je aplikacija upaljena
-    using var connection = new SqliteConnection("Data Source=InMemorySample;Mode=Memory;Cache=Shared");
-    connection.Open();
-    var command = connection.CreateCommand();
-    command.CommandText = @"
+    using var command = connection.CreateCommand();
+    command.CommandText = """
         CREATE TABLE Users (
             Id INTEGER PRIMARY KEY AUTOINCREMENT,
-            Username TEXT,
-            Email TEXT,
-            Role TEXT
+            Username TEXT NOT NULL,
+            Email TEXT NOT NULL,
+            Role TEXT NOT NULL
         );
-        INSERT INTO Users (Username, Email, Role) VALUES ('admin', 'admin@firma.ba', 'Administrator');
-        INSERT INTO Users (Username, Email, Role) VALUES ('adnan', 'adnan@firma.ba', 'Korisnik');
-        INSERT INTO Users (Username, Email, Role) VALUES ('test', 'test@firma.ba', 'Korisnik');
-    ";
+        INSERT INTO Users (Username, Email, Role) VALUES ('admin', 'admin@example.com', 'Administrator');
+        INSERT INTO Users (Username, Email, Role) VALUES ('alice', 'alice@example.com', 'User');
+        INSERT INTO Users (Username, Email, Role) VALUES ('bob', 'bob@example.com', 'User');
+        """;
     command.ExecuteNonQuery();
 }
