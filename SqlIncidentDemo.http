@@ -1,6 +1,20 @@
-@SqlIncidentDemo_HostAddress = http://localhost:5294
+@host = http://localhost:5294
 
-GET {{SqlIncidentDemo_HostAddress}}/weatherforecast/
-Accept: application/json
+### 1. Normal search on the secure endpoint (200, returns alice)
+GET {{host}}/api/users/SearchSecure?username=alice
 
-###
+### 2. Injection against the secure endpoint (200, empty list)
+# The parameterized query treats the whole payload as a literal username,
+# so the attack simply finds nobody.
+GET {{host}}/api/users/SearchSecure?username=admin' OR '1'='1
+
+### 3. Injection against the vulnerable endpoint: INCIDENT RESPONSE (403)
+# Without the middleware this would return every user in the table.
+GET {{host}}/api/users/SearchVulnerable?username=admin' OR '1'='1
+
+### 4. Destructive command against the vulnerable endpoint (403)
+GET {{host}}/api/users/SearchVulnerable?username=x'; DROP TABLE Users; --
+
+### 5. Normal search on the vulnerable endpoint (200, returns bob)
+# Shows that legitimate traffic still passes through the filter.
+GET {{host}}/api/users/SearchVulnerable?username=bob

@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.Sqlite;
+using SqlIncidentDemo.Middleware;
 
 namespace SqlIncidentDemo.Controllers;
 
@@ -7,48 +8,57 @@ namespace SqlIncidentDemo.Controllers;
 [Route("api/[controller]")]
 public class UsersController : ControllerBase
 {
-    private readonly string _connectionString = "Data Source=InMemorySample;Mode=Memory;Cache=Shared";
+    private readonly string _connectionString;
 
-    // RANJIVA METODA
+    public UsersController(IConfiguration configuration)
+    {
+        _connectionString = configuration.GetConnectionString("Users")!;
+    }
+
+    // INTENTIONALLY VULNERABLE: user input is concatenated straight into the SQL,
+    // so an attacker can change the query itself. Only the detection middleware
+    // stands in front of it.
     [HttpGet("SearchVulnerable")]
     public IActionResult SearchVulnerable([FromQuery] string username)
     {
-        var users = new List<object>();
         using var connection = new SqliteConnection(_connectionString);
         connection.Open();
 
-        // Primjer lose prakse; Haker može manipulisati SQL sintaksom
-        string query = "SELECT Id, Username, Email, Role FROM Users WHERE Username = '" + username + "'";
-        
-        using var command = new SqliteCommand(query, connection);
-        using var reader = command.ExecuteReader();
-        
-        while (reader.Read())
-        {
-            users.Add(new { Id = reader.GetInt32(0), Username = reader.GetString(1), Email = reader.GetString(2), Role = reader.GetString(3) });
-        }
-        return Ok(users);
+        using var command = connection.CreateCommand();
+        command.CommandText =
+            "SELECT Id, Username, Email, Role FROM Users WHERE Username = '" + username + "'";
+
+        return Ok(ReadUsers(command));
     }
 
-    // Secure by design metoda
+    // SECURE BY DESIGN: a parameterized query. The input is always treated as a
+    // value, never as SQL, so injection is impossible here even without the
+    // middleware. That is why this endpoint opts out of it: the demo can show
+    // the payload being harmlessly treated as a literal username.
     [HttpGet("SearchSecure")]
+    [SkipSqlInjectionDetection]
     public IActionResult SearchSecure([FromQuery] string username)
     {
-        var users = new List<object>();
         using var connection = new SqliteConnection(_connectionString);
         connection.Open();
 
-        // SQL injection ne radi, parametarizovani upiti
-        string query = "SELECT Id, Username, Email, Role FROM Users WHERE Username = @username";
-        
-        using var command = new SqliteCommand(query, connection);
-        command.Parameters.AddWithValue("@username", username); // Parametrizacija
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT Id, Username, Email, Role FROM Users WHERE Username = @username";
+        command.Parameters.AddWithValue("@username", username);
+
+        return Ok(ReadUsers(command));
+    }
+
+    private static List<UserDto> ReadUsers(SqliteCommand command)
+    {
+        var users = new List<UserDto>();
         using var reader = command.ExecuteReader();
-        
         while (reader.Read())
         {
-            users.Add(new { Id = reader.GetInt32(0), Username = reader.GetString(1), Email = reader.GetString(2), Role = reader.GetString(3) });
+            users.Add(new UserDto(reader.GetInt32(0), reader.GetString(1), reader.GetString(2), reader.GetString(3)));
         }
-        return Ok(users);
+        return users;
     }
 }
+
+public record UserDto(int Id, string Username, string Email, string Role);
